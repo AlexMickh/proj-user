@@ -1,0 +1,27 @@
+version: "3"
+
+tasks:
+  build:
+    cmds:
+      - go build -o ./bin/app ./cmd/app/main.go
+  run:
+    deps: [compose, build]
+    env:
+      CONFIG_PATH: ./config/local.yml
+    cmds:
+      - ./bin/app
+  test:
+    cmds:
+      - go test -v -race ./...
+  lint:
+    cmds:
+      - golangci-lint run ./...
+  set-env:
+    cmds:
+      - rm -rf .env
+      - go run ./cmd/env-setter/main.go --config=./config/local.yml
+  compose:
+    deps: [set-env]
+    cmds:
+      - docker compose up -d
+      - sleep 3
