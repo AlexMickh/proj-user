@@ -5,11 +5,13 @@ import (
 	"errors"
 
 	"github.com/AlexMickh/proj-protos/pkg/api/user"
+	"github.com/AlexMickh/proj-user/internal/models"
 	"github.com/AlexMickh/proj-user/internal/storage"
 	"github.com/AlexMickh/proj-user/pkg/logger"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type Service interface {
@@ -22,6 +24,8 @@ type Service interface {
 		skills []string,
 		avatar []byte,
 	) (string, error)
+	UserByEmail(ctx context.Context, email string) (models.User, error)
+	VerifyEmail(ctx context.Context, email string) error
 }
 
 type Server struct {
@@ -82,4 +86,59 @@ func (s *Server) CreateUser(ctx context.Context, req *user.CreateUserRequest) (*
 	return &user.CreateUserResponse{
 		Id: id,
 	}, nil
+}
+
+func (s *Server) GetUserByEmail(ctx context.Context, req *user.GetUserByEmailRequest) (*user.GetUserByEmailResponse, error) {
+	const op = "grpc.server.GetUserByEmail"
+
+	log := logger.FromCtx(ctx).With(zap.String("op", op))
+
+	if req.GetEmail() == "" {
+		log.Error("email is empty")
+		return nil, status.Error(codes.InvalidArgument, "email is required")
+	}
+
+	userInfo, err := s.service.UserByEmail(ctx, req.GetEmail())
+	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			log.Error("user not found", zap.Error(err))
+			return nil, status.Error(codes.NotFound, storage.ErrUserNotFound.Error())
+		}
+		log.Error("failed to get user", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to get user")
+	}
+
+	return &user.GetUserByEmailResponse{
+		Id:              userInfo.ID,
+		Email:           userInfo.Email,
+		Name:            userInfo.Name,
+		Password:        userInfo.Password,
+		About:           &userInfo.About,
+		Skills:          userInfo.Skills,
+		AvatarUrl:       userInfo.AvatarUrl,
+		IsEmailVerified: userInfo.IsEmailVerified,
+	}, nil
+}
+
+func (s *Server) VerifyEmail(ctx context.Context, req *user.VerifyEmailRequest) (*emptypb.Empty, error) {
+	const op = "grpc.server.VerifyEmail"
+
+	log := logger.FromCtx(ctx).With(zap.String("op", op))
+
+	if req.GetEmail() == "" {
+		log.Error("email is empty")
+		return nil, status.Error(codes.InvalidArgument, "email is required")
+	}
+
+	err := s.service.VerifyEmail(ctx, req.GetEmail())
+	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			log.Error("user not found", zap.Error(err))
+			return nil, status.Error(codes.NotFound, storage.ErrUserNotFound.Error())
+		}
+		log.Error("failed to verify email", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to verify email")
+	}
+
+	return &emptypb.Empty{}, nil
 }

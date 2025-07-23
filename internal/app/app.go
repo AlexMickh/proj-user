@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net"
 
 	"github.com/AlexMickh/proj-protos/pkg/api/user"
@@ -10,11 +11,14 @@ import (
 	"github.com/AlexMickh/proj-user/internal/service"
 	"github.com/AlexMickh/proj-user/internal/storage/minio"
 	"github.com/AlexMickh/proj-user/internal/storage/postgres"
+	"github.com/AlexMickh/proj-user/internal/storage/redis"
 	"github.com/AlexMickh/proj-user/pkg/logger"
 	"github.com/AlexMickh/proj-user/pkg/minio_client"
 	"github.com/AlexMickh/proj-user/pkg/postgres_client"
+	"github.com/AlexMickh/proj-user/pkg/redis_client"
 	"github.com/jackc/pgx/v5/pgxpool"
 	minio_lib "github.com/minio/minio-go/v7"
+	redis_lib "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -23,6 +27,7 @@ type App struct {
 	cfg    *config.Config
 	db     *pgxpool.Pool
 	s3     *minio_lib.Client
+	cash   *redis_lib.Client
 	server *grpc.Server
 }
 
@@ -64,8 +69,22 @@ func Register(ctx context.Context, cfg *config.Config) *App {
 
 	minio := minio.New(s3, cfg.Minio.BucketName)
 
+	log.Info("initing redis")
+	cash, err := redis_client.New(
+		ctx,
+		fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
+		cfg.Redis.User,
+		cfg.Redis.Password,
+		cfg.Redis.DB,
+	)
+	if err != nil {
+		log.Fatal("failed to init redis", zap.Error(err))
+	}
+
+	redis := redis.New(cash, cfg.Redis.Expiration)
+
 	log.Info("initing service")
-	service := service.New(postgres, minio)
+	service := service.New(postgres, minio, redis)
 
 	srv := server.New(service)
 	server := grpc.NewServer(grpc.UnaryInterceptor(logger.Interceptor(ctx)))
@@ -75,6 +94,7 @@ func Register(ctx context.Context, cfg *config.Config) *App {
 		cfg:    cfg,
 		db:     db,
 		s3:     s3,
+		cash:   cash,
 		server: server,
 	}
 }
@@ -103,5 +123,6 @@ func (a *App) Run(ctx context.Context) {
 func (a *App) GracefulStop() {
 	a.db.Close()
 	a.s3.CredContext().Client.CloseIdleConnections()
+	a.cash.Close()
 	a.server.GracefulStop()
 }

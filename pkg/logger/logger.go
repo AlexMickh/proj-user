@@ -69,7 +69,12 @@ func New(ctx context.Context, outputPaths []string, env string) context.Context 
 }
 
 func FromCtx(ctx context.Context) *zap.Logger {
-	return ctx.Value(Key).(*zap.Logger)
+	log := ctx.Value(Key).(*zap.Logger)
+	requestId, ok := ctx.Value(RequestID).(string)
+	if ok && requestId != "" {
+		log = log.With(zap.String(RequestID, requestId))
+	}
+	return log
 }
 
 func Interceptor(ctx context.Context) grpc.UnaryServerInterceptor {
@@ -81,8 +86,7 @@ func Interceptor(ctx context.Context) grpc.UnaryServerInterceptor {
 		if ok {
 			guid, ok := md[RequestID]
 			if ok {
-				FromCtx(lCtx).Error("No request id")
-				ctx = context.WithValue(ctx, RequestID, guid)
+				lCtx = context.WithValue(lCtx, RequestID, guid[0])
 			}
 		}
 
