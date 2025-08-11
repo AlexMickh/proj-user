@@ -171,6 +171,7 @@ func (s *Storage) UsersBySkills(ctx context.Context, skills []string) ([]models.
 	query, args, err := s.psql.Select("id", "email", "name", "password", "about", "skills", "avatar_url", "is_email_verified").
 		From("users").
 		Where("skills && ? AND is_email_verified = ?", skills, true).
+		OrderBy("RANDOM()").
 		Limit(10).
 		ToSql()
 	if err != nil {
