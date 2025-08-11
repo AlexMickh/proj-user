@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlexMickh/proj-protos/pkg/api/user"
 	"github.com/AlexMickh/proj-user/internal/models"
+	"github.com/AlexMickh/proj-user/internal/service"
 	"github.com/AlexMickh/proj-user/internal/storage"
 	"github.com/AlexMickh/proj-user/pkg/logger"
 	"go.uber.org/zap"
@@ -25,7 +26,9 @@ type Service interface {
 		avatar []byte,
 	) (string, error)
 	UserByEmail(ctx context.Context, email string) (models.User, error)
-	VerifyEmail(ctx context.Context, email string) error
+	VerifyEmail(ctx context.Context, id string) error
+	UserById(ctx context.Context, id string) (models.User, error)
+	UsersBySkills(ctx context.Context, skills []string) ([]models.User, error)
 }
 
 type Server struct {
@@ -49,15 +52,15 @@ func (s *Server) CreateUser(ctx context.Context, req *user.CreateUserRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "email is required")
 	}
 	if req.GetName() == "" {
-		log.Error("email is empty")
+		log.Error("name is empty")
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 	if req.GetPassword() == "" {
-		log.Error("email is empty")
+		log.Error("password is empty")
 		return nil, status.Error(codes.InvalidArgument, "password is required")
 	}
 	if req.GetSkills() == nil {
-		log.Error("email is empty")
+		log.Error("skills is empty")
 		return nil, status.Error(codes.InvalidArgument, "skills is required")
 	}
 
@@ -104,19 +107,25 @@ func (s *Server) GetUserByEmail(ctx context.Context, req *user.GetUserByEmailReq
 			log.Error("user not found", zap.Error(err))
 			return nil, status.Error(codes.NotFound, storage.ErrUserNotFound.Error())
 		}
+		if errors.Is(err, service.ErrEmailNotVerify) {
+			log.Error("email not verify", zap.Error(err))
+			return nil, status.Error(codes.Unauthenticated, service.ErrEmailNotVerify.Error())
+		}
 		log.Error("failed to get user", zap.Error(err))
 		return nil, status.Error(codes.Internal, "failed to get user")
 	}
 
 	return &user.GetUserByEmailResponse{
-		Id:              userInfo.ID,
-		Email:           userInfo.Email,
-		Name:            userInfo.Name,
-		Password:        userInfo.Password,
-		About:           &userInfo.About,
-		Skills:          userInfo.Skills,
-		AvatarUrl:       userInfo.AvatarUrl,
-		IsEmailVerified: userInfo.IsEmailVerified,
+		User: &user.UserType{
+			Id:              userInfo.ID,
+			Email:           userInfo.Email,
+			Name:            userInfo.Name,
+			Password:        userInfo.Password,
+			About:           &userInfo.About,
+			Skills:          userInfo.Skills,
+			AvatarUrl:       userInfo.AvatarUrl,
+			IsEmailVerified: userInfo.IsEmailVerified,
+		},
 	}, nil
 }
 
@@ -125,12 +134,12 @@ func (s *Server) VerifyEmail(ctx context.Context, req *user.VerifyEmailRequest) 
 
 	log := logger.FromCtx(ctx).With(zap.String("op", op))
 
-	if req.GetEmail() == "" {
-		log.Error("email is empty")
-		return nil, status.Error(codes.InvalidArgument, "email is required")
+	if req.GetId() == "" {
+		log.Error("id is empty")
+		return nil, status.Error(codes.InvalidArgument, "id is required")
 	}
 
-	err := s.service.VerifyEmail(ctx, req.GetEmail())
+	err := s.service.VerifyEmail(ctx, req.GetId())
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			log.Error("user not found", zap.Error(err))
@@ -141,4 +150,80 @@ func (s *Server) VerifyEmail(ctx context.Context, req *user.VerifyEmailRequest) 
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func (s *Server) GetUserById(ctx context.Context, req *user.GetUserByIdRequest) (*user.GetUserByIdResponse, error) {
+	const op = "grpc.server.GetUserById"
+
+	log := logger.FromCtx(ctx).With(zap.String("op", op))
+
+	id := req.GetId()
+	if id == "" {
+		log.Error("id is empty")
+		return nil, status.Error(codes.InvalidArgument, "id is required")
+	}
+
+	userInfo, err := s.service.UserById(ctx, id)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			log.Error("user not found", zap.Error(err))
+			return nil, status.Error(codes.NotFound, storage.ErrUserNotFound.Error())
+		}
+		if errors.Is(err, service.ErrEmailNotVerify) {
+			log.Error("email not verify", zap.Error(err))
+			return nil, status.Error(codes.Unauthenticated, service.ErrEmailNotVerify.Error())
+		}
+		log.Error("failed to get user", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to get user")
+	}
+
+	return &user.GetUserByIdResponse{
+		User: &user.UserType{
+			Id:              userInfo.ID,
+			Email:           userInfo.Email,
+			Name:            userInfo.Name,
+			Password:        userInfo.Password,
+			About:           &userInfo.About,
+			Skills:          userInfo.Skills,
+			AvatarUrl:       userInfo.AvatarUrl,
+			IsEmailVerified: userInfo.IsEmailVerified,
+		},
+	}, nil
+}
+
+func (s *Server) GetUsersBySkills(ctx context.Context, req *user.GetUsersBySkillsRequest) (*user.GetUsersBySkillsResponse, error) {
+	const op = "grpc.server.GetUsersBySkills"
+
+	log := logger.FromCtx(ctx).With(zap.String("op", op))
+
+	skills := req.GetSkills()
+	if skills == nil || len(skills) == 0 {
+		log.Error("skills is empty")
+		return nil, status.Error(codes.InvalidArgument, "skills is required")
+	}
+
+	usersInfo, err := s.service.UsersBySkills(ctx, skills)
+	if err != nil {
+		log.Error("failed to get users")
+		return nil, status.Error(codes.InvalidArgument, "failed to get users")
+	}
+
+	users := make([]*user.UserType, 0, len(usersInfo))
+	for _, userInfo := range usersInfo {
+		user := &user.UserType{
+			Id:              userInfo.ID,
+			Email:           userInfo.Email,
+			Name:            userInfo.Name,
+			Password:        userInfo.Password,
+			About:           &userInfo.About,
+			Skills:          userInfo.Skills,
+			AvatarUrl:       userInfo.AvatarUrl,
+			IsEmailVerified: userInfo.IsEmailVerified,
+		}
+		users = append(users, user)
+	}
+
+	return &user.GetUsersBySkillsResponse{
+		User: users,
+	}, nil
 }

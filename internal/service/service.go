@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/AlexMickh/proj-user/internal/models"
@@ -20,7 +21,9 @@ type Storage interface {
 		avatarUrl string,
 	) error
 	UserByEmail(ctx context.Context, email string) (models.User, error)
-	VerifyEmail(ctx context.Context, email string) (models.User, error)
+	VerifyEmail(ctx context.Context, id string) (models.User, error)
+	UserById(ctx context.Context, id string) (models.User, error)
+	UsersBySkills(ctx context.Context, skills []string) ([]models.User, error)
 }
 
 type S3 interface {
@@ -31,6 +34,7 @@ type Cash interface {
 	SaveUser(ctx context.Context, user models.User) error
 	UserByEmail(ctx context.Context, email string) (models.User, error)
 	UpdateUser(ctx context.Context, user models.User) error
+	UserById(ctx context.Context, id string) (models.User, error)
 }
 
 type Service struct {
@@ -38,6 +42,8 @@ type Service struct {
 	s3      S3
 	cash    Cash
 }
+
+var ErrEmailNotVerify = errors.New("email is not verify")
 
 func New(storage Storage, s3 S3, cash Cash) *Service {
 	return &Service{
@@ -87,12 +93,18 @@ func (s *Service) UserByEmail(ctx context.Context, email string) (models.User, e
 
 	user, err := s.cash.UserByEmail(ctx, email)
 	if err == nil {
+		if !user.IsEmailVerified {
+			return models.User{}, fmt.Errorf("%s: %w", op, ErrEmailNotVerify)
+		}
 		return user, nil
 	}
 
 	user, err = s.storage.UserByEmail(ctx, email)
 	if err != nil {
 		return models.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if !user.IsEmailVerified {
+		return models.User{}, fmt.Errorf("%s: %w", op, ErrEmailNotVerify)
 	}
 
 	err = s.cash.SaveUser(ctx, user)
@@ -103,10 +115,10 @@ func (s *Service) UserByEmail(ctx context.Context, email string) (models.User, e
 	return user, nil
 }
 
-func (s *Service) VerifyEmail(ctx context.Context, email string) error {
+func (s *Service) VerifyEmail(ctx context.Context, id string) error {
 	const op = "service.VerifyEmail"
 
-	user, err := s.storage.VerifyEmail(ctx, email)
+	user, err := s.storage.VerifyEmail(ctx, id)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -117,4 +129,42 @@ func (s *Service) VerifyEmail(ctx context.Context, email string) error {
 	}
 
 	return nil
+}
+
+func (s *Service) UserById(ctx context.Context, id string) (models.User, error) {
+	const op = "service.UserById"
+
+	user, err := s.cash.UserById(ctx, id)
+	if err == nil {
+		if !user.IsEmailVerified {
+			return models.User{}, fmt.Errorf("%s: %w", op, ErrEmailNotVerify)
+		}
+		return user, nil
+	}
+
+	user, err = s.storage.UserById(ctx, id)
+	if err != nil {
+		return models.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if !user.IsEmailVerified {
+		return models.User{}, fmt.Errorf("%s: %w", op, ErrEmailNotVerify)
+	}
+
+	err = s.cash.SaveUser(ctx, user)
+	if err != nil {
+		return user, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return user, nil
+}
+
+func (s *Service) UsersBySkills(ctx context.Context, skills []string) ([]models.User, error) {
+	const op = "service.UsersBySkills"
+
+	users, err := s.storage.UsersBySkills(ctx, skills)
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }

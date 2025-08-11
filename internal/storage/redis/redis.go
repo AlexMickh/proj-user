@@ -101,6 +101,45 @@ func (r *Redis) UpdateUser(ctx context.Context, user models.User) error {
 	return nil
 }
 
+func (r *Redis) UserById(ctx context.Context, id string) (models.User, error) {
+	const op = "storage.redis.UserByEmail"
+
+	var cursor uint64
+	var keys []string
+	var err error
+	keys, cursor, err = r.rdb.Scan(ctx, cursor, id+"&*", 3).Result()
+	if err != nil || len(keys) == 0 {
+		return models.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	var user models.User
+	err = r.rdb.HGetAll(ctx, keys[0]).Scan(&user)
+	if err != nil {
+		return models.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	arr := strings.Split(keys[0], "&")
+	user.ID = arr[0]
+	user.Email = arr[1]
+
+	user.Skills, err = r.rdb.LRange(ctx, genSkillsKey(user.ID), 0, -1).Result()
+	if err != nil {
+		return models.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = r.rdb.Expire(ctx, keys[0], r.expiration).Err()
+	if err != nil {
+		return models.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	err = r.rdb.Expire(ctx, genSkillsKey(user.ID), r.expiration).Err()
+	if err != nil {
+		return models.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return user, nil
+}
+
 func (r *Redis) saveUser(ctx context.Context, user models.User) error {
 	const op = "storage.redis.saveUser"
 
