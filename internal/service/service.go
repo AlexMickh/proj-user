@@ -23,7 +23,8 @@ type Storage interface {
 	UserByEmail(ctx context.Context, email string) (models.User, error)
 	VerifyEmail(ctx context.Context, id string) (models.User, error)
 	UserById(ctx context.Context, id string) (models.User, error)
-	UsersBySkills(ctx context.Context, skills []string) ([]models.User, error)
+	UsersBySkills(ctx context.Context, userId string, skills []string) ([]models.User, error)
+	RandomUsers(ctx context.Context, userId string) ([]models.User, error)
 }
 
 type S3 interface {
@@ -139,6 +140,7 @@ func (s *Service) UserById(ctx context.Context, id string) (models.User, error) 
 		if !user.IsEmailVerified {
 			return models.User{}, fmt.Errorf("%s: %w", op, ErrEmailNotVerify)
 		}
+		fmt.Println("from cash")
 		return user, nil
 	}
 
@@ -158,10 +160,19 @@ func (s *Service) UserById(ctx context.Context, id string) (models.User, error) 
 	return user, nil
 }
 
-func (s *Service) UsersBySkills(ctx context.Context, skills []string) ([]models.User, error) {
+func (s *Service) UsersBySkills(ctx context.Context, userId string, skills []string) ([]models.User, error) {
 	const op = "service.UsersBySkills"
 
-	users, err := s.storage.UsersBySkills(ctx, skills)
+	if skills != nil {
+		users, err := s.storage.UsersBySkills(ctx, userId, skills)
+		if err != nil {
+			return nil, err
+		}
+
+		return users, nil
+	}
+
+	users, err := s.storage.RandomUsers(ctx, userId)
 	if err != nil {
 		return nil, err
 	}

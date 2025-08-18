@@ -11,6 +11,7 @@ import (
 	"github.com/AlexMickh/proj-user/pkg/logger"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -28,7 +29,7 @@ type Service interface {
 	UserByEmail(ctx context.Context, email string) (models.User, error)
 	VerifyEmail(ctx context.Context, id string) error
 	UserById(ctx context.Context, id string) (models.User, error)
-	UsersBySkills(ctx context.Context, skills []string) ([]models.User, error)
+	UsersBySkills(ctx context.Context, userId string, skills []string) ([]models.User, error)
 }
 
 type Server struct {
@@ -196,13 +197,25 @@ func (s *Server) GetUsersBySkills(ctx context.Context, req *user.GetUsersBySkill
 
 	log := logger.FromCtx(ctx).With(zap.String("op", op))
 
-	skills := req.GetSkills()
-	if skills == nil || len(skills) == 0 {
-		log.Error("skills is empty")
-		return nil, status.Error(codes.InvalidArgument, "skills is required")
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		log.Error("failed to get metadata")
+		return nil, status.Error(codes.Unauthenticated, "failed to get metadata")
 	}
 
-	usersInfo, err := s.service.UsersBySkills(ctx, skills)
+	userId, ok := md["user_id"]
+	if !ok {
+		log.Error("failed to get user id")
+		return nil, status.Error(codes.Unauthenticated, "user id is required")
+	}
+
+	skills := req.GetSkills()
+	// if skills == nil || len(skills) == 0 {
+	// 	log.Error("skills is empty")
+	// 	return nil, status.Error(codes.InvalidArgument, "skills is required")
+	// }
+
+	usersInfo, err := s.service.UsersBySkills(ctx, userId[0], skills)
 	if err != nil {
 		log.Error("failed to get users")
 		return nil, status.Error(codes.InvalidArgument, "failed to get users")

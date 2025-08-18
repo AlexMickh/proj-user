@@ -165,12 +165,53 @@ func (s *Storage) UserById(ctx context.Context, id string) (models.User, error) 
 	return user, nil
 }
 
-func (s *Storage) UsersBySkills(ctx context.Context, skills []string) ([]models.User, error) {
+func (s *Storage) UsersBySkills(ctx context.Context, userId string, skills []string) ([]models.User, error) {
 	const op = "storage.postgres.UsersBySkills"
 
 	query, args, err := s.psql.Select("id", "email", "name", "password", "about", "skills", "avatar_url", "is_email_verified").
 		From("users").
-		Where("skills && ? AND is_email_verified = ?", skills, true).
+		Where("skills && ? AND is_email_verified = ? AND id != ?", skills, true, userId).
+		OrderBy("RANDOM()").
+		Limit(10).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	rows, err := s.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		rows.Scan(
+			&user.ID,
+			&user.Email,
+			&user.Name,
+			&user.Password,
+			&user.About,
+			&user.Skills,
+			&user.AvatarUrl,
+			&user.IsEmailVerified,
+		)
+		users = append(users, user)
+	}
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return users, nil
+}
+
+func (s *Storage) RandomUsers(ctx context.Context, userId string) ([]models.User, error) {
+	const op = "storage.postgres.RandomUsers"
+
+	query, args, err := s.psql.Select("id", "email", "name", "password", "about", "skills", "avatar_url", "is_email_verified").
+		From("users").
+		Where("is_email_verified = ? AND id != ?", true, userId).
 		OrderBy("RANDOM()").
 		Limit(10).
 		ToSql()
