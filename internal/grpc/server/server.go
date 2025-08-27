@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/AlexMickh/proj-protos/pkg/api/user"
+	"github.com/AlexMickh/proj-user/internal/consts"
 	"github.com/AlexMickh/proj-user/internal/models"
 	"github.com/AlexMickh/proj-user/internal/service"
 	"github.com/AlexMickh/proj-user/internal/storage"
@@ -19,6 +20,7 @@ import (
 type Service interface {
 	CreateUser(
 		ctx context.Context,
+		provider string,
 		email string,
 		name string,
 		password string,
@@ -67,6 +69,7 @@ func (s *Server) CreateUser(ctx context.Context, req *user.CreateUserRequest) (*
 
 	id, err := s.service.CreateUser(
 		ctx,
+		consts.FieldProvider,
 		req.GetEmail(),
 		req.GetName(),
 		req.GetPassword(),
@@ -88,6 +91,64 @@ func (s *Server) CreateUser(ctx context.Context, req *user.CreateUserRequest) (*
 	}
 
 	return &user.CreateUserResponse{
+		Id: id,
+	}, nil
+}
+
+func (s *Server) CreateUserWithProvider(
+	ctx context.Context,
+	req *user.CreateUserWithProviderRequest,
+) (*user.CreateUserWithProviderResponse, error) {
+	const op = "grpc.server.CreateUserWithProvider"
+
+	log := logger.FromCtx(ctx).With(zap.String("op", op))
+
+	if req.GetEmail() == "" {
+		log.Error("email is empty")
+		return nil, status.Error(codes.InvalidArgument, "email is required")
+	}
+	if req.GetLogin() == "" {
+		log.Error("login is empty")
+		return nil, status.Error(codes.InvalidArgument, "login is required")
+	}
+	if req.GetProvider() == "" {
+		log.Error("provider is empty")
+		return nil, status.Error(codes.InvalidArgument, "provider is required")
+	}
+
+	var provider string
+	switch req.GetProvider() {
+	case "YANDEX":
+		provider = consts.YandexProvider
+	default:
+		log.Error("provider is not supported", zap.String("provider", provider))
+		return nil, status.Error(codes.InvalidArgument, "provider is not supported")
+	}
+
+	id, err := s.service.CreateUser(
+		ctx,
+		provider,
+		req.GetEmail(),
+		req.GetLogin(),
+		"",
+		"",
+		nil,
+		nil,
+	)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserAlreadyExists) {
+			log.Error("user already exists")
+			return nil, status.Error(codes.InvalidArgument, storage.ErrUserAlreadyExists.Error())
+		}
+		if errors.Is(err, storage.ErrInvalidSkills) {
+			log.Error("skill not in the skills list")
+			return nil, status.Error(codes.InvalidArgument, storage.ErrInvalidSkills.Error())
+		}
+		log.Error("failed to create user", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to create user")
+	}
+
+	return &user.CreateUserWithProviderResponse{
 		Id: id,
 	}, nil
 }

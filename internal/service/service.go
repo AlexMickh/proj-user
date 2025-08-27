@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/AlexMickh/proj-user/internal/consts"
 	"github.com/AlexMickh/proj-user/internal/models"
+	"github.com/AlexMickh/proj-user/internal/storage"
 	"github.com/google/uuid"
 )
 
@@ -19,6 +21,7 @@ type Storage interface {
 		about string,
 		skills []string,
 		avatarUrl string,
+		provider string,
 	) error
 	UserByEmail(ctx context.Context, email string) (models.User, error)
 	VerifyEmail(ctx context.Context, id string) (models.User, error)
@@ -56,6 +59,7 @@ func New(storage Storage, s3 S3, cash Cash) *Service {
 
 func (s *Service) CreateUser(
 	ctx context.Context,
+	provider string,
 	email string,
 	name string,
 	password string,
@@ -81,8 +85,17 @@ func (s *Service) CreateUser(
 		about,
 		skills,
 		avatarUrl,
+		provider,
 	)
 	if err != nil {
+		if errors.Is(err, storage.ErrUserAlreadyExists) && provider != consts.FieldProvider {
+			user, err := s.UserByEmail(ctx, email)
+			if err != nil {
+				return "", fmt.Errorf("%s: %w", op, err)
+			}
+
+			return user.ID, nil
+		}
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
 

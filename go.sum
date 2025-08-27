@@ -1,5 +1,9 @@
 github.com/AlexMickh/proj-protos v0.1.4 h1:cvXSalzT6Ver8OsFHWMF63F0E9TCV2bANQxf2zlBDyk=
 github.com/AlexMickh/proj-protos v0.1.4/go.mod h1:i8i6FuF7PQEe6DNb0xrU2WFAWH71FLHGtwupyWztqd0=
+github.com/AlexMickh/proj-protos v0.2.1 h1:szxEV2yk39RTP1X2ViRfD26A9p65241NH7RqrsMko1o=
+github.com/AlexMickh/proj-protos v0.2.1/go.mod h1:i8i6FuF7PQEe6DNb0xrU2WFAWH71FLHGtwupyWztqd0=
+github.com/AlexMickh/proj-protos v0.2.2 h1:WXIztgEU51lH1vuvwm9Msx1nlK0ta9C3UvHqQVeH7rg=
+github.com/AlexMickh/proj-protos v0.2.2/go.mod h1:i8i6FuF7PQEe6DNb0xrU2WFAWH71FLHGtwupyWztqd0=
 github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 h1:L/gRVlceqvL25UVaW/CKtUDjefjrs0SPonmDGUVOYP0=
 github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/BurntSushi/toml v1.2.1 h1:9F2/+DoOYIOksmaJFPw1tGFy1eDnIJXg+UHjuD8lTak=

@@ -3,7 +3,7 @@ module github.com/AlexMickh/proj-user
 go 1.24.4
 
 require (
-	github.com/AlexMickh/proj-protos v0.1.4
+	github.com/AlexMickh/proj-protos v0.2.2
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/google/uuid v1.6.0
 	github.com/ilyakaznacheev/cleanenv v1.5.0

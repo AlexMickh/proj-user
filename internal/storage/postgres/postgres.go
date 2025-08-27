@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/AlexMickh/proj-user/internal/consts"
 	"github.com/AlexMickh/proj-user/internal/models"
 	"github.com/AlexMickh/proj-user/internal/storage"
 	sq "github.com/Masterminds/squirrel"
@@ -40,12 +41,18 @@ func (s *Storage) SaveUser(
 	about string,
 	skills []string,
 	avatarUrl string,
+	provider string,
 ) error {
 	const op = "storage.postgres.SaveUser"
 
+	is_email_verified := false
+	if provider != consts.FieldProvider {
+		is_email_verified = true
+	}
+
 	query, args, err := s.psql.Insert("users").
-		Columns("id", "email", "name", "password", "about", "skills", "avatar_url").
-		Values(id, email, name, password, about, skills, avatarUrl).
+		Columns("id", "email", "name", "password", "about", "skills", "avatar_url", "provider", "is_email_verified").
+		Values(id, email, name, password, about, skills, avatarUrl, provider, is_email_verified).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
